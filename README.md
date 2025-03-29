@@ -6,6 +6,8 @@
 - Engine agnostic to support all
 - Code agnostic to support all
 
+The technical specifications can be found [here](https://github.com/ord-premise/common-workflow-schemas/blob/main/technical_specifications.md).
+
 ## Authors
 
 - Edan Bainglass (PSI)

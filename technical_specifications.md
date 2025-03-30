@@ -25,7 +25,6 @@ This section defines key terms used throughout this specification:
 - **Simulation Code**: A scientific code used for atomistic simulations, such as VASP, Quantum ESPRESSO, or CP2K.
 - **StructureResource**: A standard OPTIMADE object used to describe atomic structures and their properties.
 
-
 ## 3. Problem Statement
 
 Current approaches to defining simulation workflows in materials science are fragmented and tightly coupled to the specific engines or codes that execute them. Inputs and outputs are often defined in ad hoc formats, with little consideration for reusability across tools or clarity in semantics. This fragmentation makes it difficult to build interoperable platforms, slows down collaborative efforts, and introduces unnecessary effort in re-implementation or translation between systems.
@@ -34,10 +33,10 @@ Moreover, the lack of standardized, machine-readable semantic meaning in these d
 
 ## 4. Proposed Solution
 
-To address these challenges, we propose a structured and semantic approach to schema authoring using Object-Oriented Linked Data (OO-LD). OO-LD combines two proven technologies:
+To address these challenges, we propose a structured and semantic approach to schema authoring using [Object-Oriented Linked Data (OO-LD)](https://github.com/OO-LD/schema). OO-LD combines two proven technologies:
 
-- **JSON Schema**: for describing the structure and validation rules of data objects, and for enabling automatic generation of user interface (UI) forms to assist users in preparing valid inputs.
-- **JSON-LD**: for embedding semantic context in JSON documents via linked data principles, enabling structured, machine-interpretable metadata.
+- **[JSON Schema](https://json-schema.org/)**: for describing the structure and validation rules of data objects, and for enabling automatic generation of user interface (UI) forms to assist users in preparing valid inputs.
+- **[JSON-LD](https://json-ld.org/)**: for embedding semantic context in JSON documents via linked data principles, enabling structured, machine-interpretable metadata.
 
 We define reusable, extensible, and semantically annotated input/output schemas for common materials workflows. These schemas are:
 
@@ -49,21 +48,15 @@ OO-LD documents thus serve a dual role: (1) providing a standardized schema for 
 
 This solution makes it possible for different platforms to exchange workflow specifications and results through a shared language, facilitating reproducibility, automation, and standardization in the computational materials science community.
 
-## 5. Implementation
+## 5. Design Principles
 
-### 5.1 Design Principles
+As stated above, the motivation for our design is to enable (1) full compatibility with the JSON-LD expansion and compaction algorithms, enabling cross-platform semantic data exchange and round-tripping between different schema contexts, and (2) compatibility with automatic UI generation and validation that rely on clean JSON Schema documents. We achieve this by defining our schemas in the OO-LD format. This allows us to leverage the strengths of both technologies while ensuring that our schemas are easy to use and understand.
 
-The schemas developed in this work were born of the AiiDA Common Workflows, a system of code-agnostic workflows that can compute materials properties such as Equation of State and Bond Dissociation energies by simulating relaxed structures with various ab-initio codes. These workflows have demonstrated their generality and reliability in benchmarking studies, including a comparative analysis of results across 11 different simulation codes ([Nature Computational Materials, 2021](https://www.nature.com/articles/s41524-021-00594-6)). We develop here OO-LD schemas for the inputs and outputs of these workflows.
+The common workflow format demonstrated in this work is derived from the [AiiDA Common Workflows](https://aiida-common-workflows.readthedocs.io) (ACWF), a system of code-agnostic workflows driven by the [AiiDA workflow engine](https://aiida.net) to compute material properties including groundstate structure geomentry, Equation of State, and bond dissociation energies. These workflows have demonstrated their generality and reliability in [benchmarking studies](https://www.nature.com/articles/s41524-021-00594-6). We develop here semantically-enriched schemas for the inputs and outputs of these workflows.
 
-The choice to start with Pydantic models was motivated by their ease of use, Python familiarity within the scientific community, flexibility, robustness, utility, performance, and compatibility with established tooling. Pydantic models are naturally exportable in JSON Schema, which serves as the structural foundation of an OO-LD document.
+The choice to start from [Pydantic](https://docs.pydantic.dev/latest/) models is motivated by their ease of use, flexibility, robustness, utility, performance, compatibility with established tooling, and familiarity within the scientific community of the Python programming language. Pydantic models are natively exportable as JSON Schemas, which serves as the structural foundation of an OO-LD document. we enrich the structural schema with semantic meaning by deriving a JSON-LD context (compatible with the [JSON-LD 1.1 specifications](https://www.w3.org/TR/json-ld11/)) from custom class- and property-level Internationalized Resource Identifiers, or IRIs for short. To focus on the ontology-enabled features rather than ontology alignment, we default our IRIs to a placeholder root namespace (`https://example.com/commonWorkflows/`), while still retaining compatability with expansion and compaction operations via JSON-LD tooling.
 
-To enrich the structural schema with semantic meaning, we add JSON-LD-compatible context through class- and property-level IRIs. Each schema class specifies a `_IRI` at the model level and attributes may be annotated using a `MetadataField` descriptor to assign descriptions, IRIs, and JSON-LD containers (e.g. `@set`). For simplicity and focus on mechanics rather than ontology alignment, IRIs default to placeholder namespaces such as `https://example.com`, while still enabling correct expansion and compaction behavior via JSON-LD tooling.
-
-One goal of this system is full compatibility with the JSON-LD expansion and compaction algorithms, enabling cross-platform semantic data exchange and round-tripping between different schema contexts. Another was to ensure compatibility with UI generation workflows that rely on clean JSON Schema documents for validation and rendering.
-
-### 5.2 Technical Details
-
-From a Python engineering perspective, semantic annotation behavior is centralized in a `SemanticModel` base class that leverages a metaclass to automatically process IRIs and semantic hints at the time of model creation.&#x20;
+From a Python engineering perspective, semantic annotation behavior is centralized in a `SemanticModel` base class. IRIs are defined as private class-level attributes, and are automatically cast as `@id` entries in the model's JSON Schema via the associated metaclass. Class properties (or model fields) are annotated with a custom `MetadataField` extension of Pydantic's `Field` function, which provides a path for IRIs, units, and other attribute-level metadata.
 
 <details>
 <summary><code>SemanticModel</code></summary>
@@ -99,7 +92,9 @@ class SemanticModel(BaseModel, metaclass=SemanticMetaclass):
 
 </details>
 
-A `model_oo_ld` method is exposed on every subclass, building a complete OO-LD document (JSON Schema + context) from the annotated model using context-generation and IRI-lifting logic built specifically for this purpose. The method ensures that any subclass of `SemanticModel` can be used to automatically generate an OO-LD-compliant schema, including structural and semantic annotations.
+<br>
+
+The `model_oo_ld` method of `SemanticModel` is made available to all schema objects and provides an export path as a complete OO-LD document (JSON Schema classes (`$defs`) and `properties` + JSON-LD `@context`) derived from the annotated model using context-generation and IRI-lifting logic built specifically for this purpose. The method ensures that any subclass of `SemanticModel` can be used to automatically generate an OO-LD-compliant schema, including structural and semantic annotations.
 
 <details>
 <summary>An example OO-LD document produced for a computational <code>Code</code> object</summary>
@@ -282,20 +277,41 @@ A `model_oo_ld` method is exposed on every subclass, building a complete OO-LD 
     }
   }
 }
-
 ```
 
 </details>
 
-## 6. Example: Common Relaxation Workflow
+<br>
 
-To illustrate the use of OO-LD schemas, we consider the example of a common relaxation workflow in computational materials science. This workflow takes as input a structure, a relaxation engine defined by a code and computational resources, and a set of calculation parameters. It outputs the relaxed  structure along with relevant computed properties such as forces, stress, total energy, and magnetization.
+The key features/benefits of this approach are:
 
-In the selected components below, `BASE_PREFIX` refers to the ontological root of all IRIs, in this case, [https://example.com/commonWorkflows](https://example.com/commonWorkflows). We emphasize that this is not a real ontology, nor are any derived from it. We further emphasize that this deliverable focuses on leveraging semantic annotations. For details on creating ontologies, please refer to our deliverable on ontologizing metadata ([https://github.com/ord-premise/interoperability-guidelines](https://github.com/ord-premise/interoperability-guidelines))
+- **Standardization**: The schema offers a standardized structure for a commonly used task in computational materials science. Pydantic provides built-in functionality to define the field, its type and description, units, and semantic meaning via an IRI
+- **Extensibility**: Additional metadata or workflow steps can be added as needed without breaking compatibility. The schema classes are extensible and hierarchical, allowing extension to composite workflows.
+- **UI Compatibility**: The JSON Schema component allows for automatic UI form generation, while the JSON-LD context ensures semantic consistency across platforms. The ease of UI interaction and interoperability potential of semantics emphasize the power of the OO-LD standard in common workflows.
+- **Interoperability**: With OO-LD, workflow inputs and outputs can be semantically interpreted and exchanged across different simulation engines and platforms, expanding open science throughout the research community.
 
-### 6.1. Schema Components
+## 6. Leveraging JSON-LD for Interoperability
 
-#### 6.1.1. Structure Input
+The use of JSON-LD in the OO-LD schema format facilitates semantic interoperability through structured contexts. JSON-LD allows JSON documents to carry semantic meaning by associating terms in the data with globally unique IRIs. This enables data to be interpreted consistently across platforms regardless of internal representations.
+
+Two core operations/algorithms in JSON-LD are **expansion** and **compaction**:
+
+- **[Expansion](https://www.w3.org/TR/json-ld11-api/#expansion)** replaces all terms in a JSON document with their full IRIs (prefix-expanded), ensuring that data is unambiguous and self-contained
+- **[Compaction](https://www.w3.org/TR/json-ld11-api/#compaction)** maps the expanded IRIs to those provided in another `@context` that are semantically equivalent (referencing the same IRIs) but syntactically different (e.g., `last_name -> surname`)
+
+By embedding a JSON-LD context directly in the schema, OO-LD documents support these transformations natively. This allows user input to be exported and interpreted by a different system using a sementically-equivalent context. The OO-LD context thus acts as a semantic bridge between different tools, platforms, and workflows, enabling meaningful data exchange without brittle or lossy transformations.
+
+In the following example, these JSON-LD algorithms is used to map the engine-agnostic input schema onto the AiiDA-specific input schema. The mapping is trivial and for demonstration purposes only. The conversion of AiiDA outputs to the engine-agnostic schema does not leverage JSON-LD (done manually), but can in principle follow the same procedure.
+
+## 7. Example: Common Relaxation Workflow
+
+To illustrate the use of OO-LD schemas, we consider the example of a common relaxation workflow in computational materials science. This workflow takes as input a structure, a relaxation engine defined by a code and computational resources, and a set of calculation parameters. It outputs the relaxed structure along with relevant computed properties such as forces, stress, total energy, and magnetization.
+
+In the selected components below, `BASE_PREFIX` refers to the ontological root of all IRIs, in this case `https://example.com/commonWorkflows`. We emphasize again that this is not a real ontology, nor are any derived from it. We further emphasize that this deliverable focuses on leveraging semantic annotations. For details on creating ontologies, please refer to our [guidelines on ontologies and semantically enriching metadata](https://github.com/ord-premise/interoperability-guidelines).
+
+### 7.1. Schema Components
+
+#### 7.1.1. Structure Input
 
 The parent `RelaxInputs` schema uses the `StructureResource` model from the OPTIMADE specification to represent atomic structures. This keeps the schema engine-agnostic and ensures compatibility with widely adopted data exchange standards and databases in materials science.
 
@@ -322,9 +338,9 @@ class RelaxInputs(
 
 </details>
 
-**6.1.2. Common Relax Inputs**
+#### 7.1.2. Common Relax Inputs
 
-The common relax inputs are the root of the common workflows. They represent the inputs for a Self-consistent force (SCF) calculation, optionally flagged for relaxation. Composite workflows computing equation of state or bond dissociation energies, for example, leverage this base calculation.
+The common relax inputs are the root of the common workflows. They represent the inputs for a self-consistent force (SCF) calculation, optionally flagged for relaxation. Composite workflows computing equation of state or bond dissociation energies, for example, leverage this base calculation.
 
 Here we define the following:
 
@@ -434,7 +450,7 @@ class CommonRelaxInputs(SemanticModel):
 
 </details>
 
-#### 6.1.3. Engines and Codes
+#### 7.1.3. Engines and Codes
 
 The workflow is designed to support multiple simulation codes (e.g., Quantum ESPRESSO, VASP) and decouples code execution from workflow logic. The `Code`  component represents the metadata of an executable code, including either an UUID identifier or a set of metadata sufficient for the engine to reproduce the code (future feature).
 
@@ -477,6 +493,8 @@ class Code(SemanticModel):
 
 </details>
 
+<br>
+
 An `Engine` object includes in addition to the associated `Code` a set of `options` defining the computational resources and remote machine metadata.
 
 <details>
@@ -503,7 +521,7 @@ class Engine(SemanticModel):
 
 </details>
 
-**6.1.4. Output**
+#### 7.1.4. Output
 
 Just as with the inputs, the output schema is defined as a Pydantic model annotated with domain-relevant metadata. It encodes properties like total energy, forces, stress, and relaxed structures.
 
@@ -563,14 +581,14 @@ class RelaxOutputs(
 
 </details>
 
-### 6.2. Inputs OO-LD
+### 7.2. Inputs OO-LD
 
-The OO-LD schema generated for inputs captures both structural validation and semantic annotations in a single document. This enriched input schema can be used to construct interoperable data packages, allowing inputs to be reused or adapted across engines or platforms. The semantic annotations ensure that terms like "protocol", "relax\_type", or "spin\_type" retain consistent meaning across systems, even when internal implementations vary.
+The OO-LD schema generated for inputs captures both structural validation and semantic annotations in a single document. This enriched input schema can be used to construct interoperable data packages, allowing inputs to be reused or adapted across engines or platforms. The semantic annotations ensure that terms like `protocol`, `relax_type`, or `spin_type` retain consistent meaning across systems, even when internal implementations vary.
 
 <details>
 <summary>An example OO-LD document for the final inputs to a common relax workflow</summary>
 
-```json
+````json
 {
   "@context": {
     "@vocab": "https://example.com/",
@@ -1803,18 +1821,18 @@ The OO-LD schema generated for inputs captures both structural validation and se
     "relationships": null
   }
 }
-```
+````
 
 </details>
 
-### 6.3. Output OO-LD
+### 7.3. Output OO-LD
 
 The semantic layer in the OO-LD output document ensures that these results can be interpreted meaningfully across data consumers—such as search services, benchmarking tools, or downstream workflows.
 
 <details>
 <summary>An example OO-LD document for the output of a common relax workflow</summary>
 
-```json
+````json
 {
   "@context": {
     "@vocab": "https://example.com/",
@@ -2797,30 +2815,31 @@ The semantic layer in the OO-LD output document ensures that these results can b
   "hartree_potential": null,
   "charge_density": null
 }
-```
+````
 
 </details>
 
-### 6.4. Benefits
+## 8. Composite Workflows
 
-- **Standardization**: The schema offers a standardized structure for a commonly used task in computational materials science. Pydantic provides built-in functionality to define the field, its type and description, units, and semantic meaning via an IRI
-- **Extensibility**: Additional metadata or workflow steps can be added as needed without breaking compatibility. The schema classes are extensible and hierarchical, allowing extension to composite workflows.
-- **UI Compatibility**: The JSON Schema component allows for automatic UI form generation, while the JSON-LD context ensures semantic consistency across platforms. The ease of UI interaction and interoperability potential of semantics emphasize the power of the OO-LD standard in common workflows.
-- **Interoperability**: With OO-LD, workflow inputs and outputs can be semantically interpreted and exchanged across different simulation engines and platforms, expanding open science throughout the research community.
+Beyond relaxation workflows, the same schema architecture supports higher-level workflows that build on relaxation as a base. For example, the computation of the equation of state involves relaxing the same structure under different volumes, while the bond dissociation energy workflow involves the relaxation of molecular fragments. These are implemented as [composite workflows](https://aiida-common-workflows.readthedocs.io/en/latest/workflows/composite/index.html) in the AiiDA Common Workflows. We provide in the [source code repository](https://github.com/edan-bainglass/common-workflow-schemas) OO-LD-exportable Pydantic models for inputs/outputs of these composite workflows by extending the models of the common relaxation workflow. This demonstrates that all workflows, whether atomic or composite, benefit from semantic interoperability and the extensibility of the OO-LD approach.
 
-## 7. Conclusion
+## 9. Conclusion
 
-The development of OO-LD schemas for common workflows in computational materials science represents a powerful and extensible solution to long-standing interoperability challenges. By combining the structural rigor of JSON Schema with the semantic capabilities of JSON-LD, we have created a flexible mechanism for defining, sharing, and interpreting input/output data across heterogeneous systems.
+The development of OO-LD-compliant schemas for common workflows in computational materials science represents a powerful and extensible solution to long-standing interoperability challenges. By combining the structural rigor of JSON Schema with the semantic capabilities of JSON-LD, we have created a flexible mechanism for defining, sharing, and interpreting input/output data across heterogeneous systems.
 
-This approach, based on Python and Pydantic for developer accessibility and performance, ensures that schemas are both human-friendly and machine-actionable. The resulting documents support dynamic UI generation, automated validation, and platform-independent semantic enrichment of data. The codebase behind this work is open and available under [GitHub](https://github.com/edan-bainglass/common-workflow-schemas), and all specifications are versioned and openly discussed to support community adoption and contributions.
+This approach, based on Python and Pydantic for developer accessibility and performance, ensures that schemas are both human-friendly and machine-actionable. The resulting documents support dynamic UI generation (future feature described in the next section), automated validation, and platform-independent semantic enrichment of data. The source code behind this work is open and available on [GitHub](https://github.com/edan-`bainglass/common-workflow-schemas).
 
 This technical specification is a living document and will continue to evolve during the remaining lifetime of the PREMISE project. It aims to reflect the ongoing expansion of schema coverage to new workflows, enhancements in tooling, and feedback from real-world use in cross-platform materials discovery.
 
-## 8. Future Work
+## 10. Future Work
 
-This specification lays the groundwork for a broader ecosystem of tools and services around semantically-enriched schemas. A major avenue for future work is the automatic generation of user interfaces (UIs) that enable researchers to build, inspect, and submit common workflow inputs using dynamic forms derived directly from OO-LD documents. These UIs would enhance usability and accessibility of complex workflows and help unify user interactions across different platforms. Additional areas of exploration include schema-driven validation services, integration with lab hardware, and workflow translation services across engines.
+This specification lays the groundwork for a broader ecosystem of tools and services around semantically-enriched schemas. In the short term, we plan to address open issues, such as automatic data/type coversions (leveraging tools such as [dlite](https://sintef.github.io/dlite/)) and string references not immediately captured by JSON-LD operations (e.g., [JSON-Schema `required` field](https://json-schema.org/understanding-json-schema/reference/object#required)).
 
-## 9. Links and References
+In the long term, one major avenue for future work is the automatic generation of user interfaces (UIs) that enable researchers to build, inspect, and submit common workflow inputs using dynamic forms derived directly from OO-LD documents. These UIs would enhance usability and accessibility of complex workflows and help unify user interactions across different platforms.
+
+Additional areas of exploration include schema-driven validation services, integration with lab hardware, and workflow translation services across engines via a standard workflow language schema. These will be explored in part in the PREMISE-sponsored [MADICES](https://madices.github.io/docs/2025/) workshops, where we will work with the community to develop a roadmap for the future of OO-LD and its applications in materials science.
+
+## 11. Resources
 
 - JSON Schema: [https://json-schema.org](https://json-schema.org)
 - JSON-LD: [https://json-ld.org](https://json-ld.org)
@@ -2828,10 +2847,11 @@ This specification lays the groundwork for a broader ecosystem of tools and serv
 - Pydantic: [https://docs.pydantic.dev](https://docs.pydantic.dev)
 - OPTIMADE: [https://www.optimade.org](https://www.optimade.org)
 - PREMISE: [https://ord-premise.org](https://ord-premise.org)
+- MADICES: [https://madices.github.io](https://madices.github.io)
+- AiiDA: [https://aiida.net](https://aiida.net)
 - AiiDA Common Workflows: [https://aiida-common-workflows.readthedocs.io](https://aiida-common-workflows.readthedocs.io)
-- Source Code Repository: [https://github.com/edan-bainglass/common-workflow-schemas](https://github.com/edan-bainglass/common-workflow-schemas)
+- Source code repository: [https://github.com/edan-bainglass/common-workflow-schemas](https://github.com/edan-bainglass/common-workflow-schemas)
 
-## 10. Acknowledgements
+## 12. Acknowledgements
 
-This work was carried out as part of the PREMISE project ([https://ord-premise.org](https://ord-premise.org)), an Establish project of the ETH Board's ORD program. The authors thank collaborators and contributors from the AiiDA team, Dr. Simon Stier of Fraunhofer ISC for his development of the OO-LD specification, and members of the materials science community for valuable discussions and feedback throughout the development of these specifications.
-
+This work was carried out as part of the PREMISE project ([https://ord-premise.org](https://ord-premise.org)), an Establish Project of the ETH Board's ORD program. The authors thank [Dr. Simon Stier](https://www.isc.fraunhofer.de/en/fields-of-activity/applications/digital-transformation.html) of the Digital Transformation team at Fraunhofer ISC for his development of the OO-LD specification, collaborators and contributors from the AiiDA team, and members of the materials science community for valuable discussions and feedback throughout the development of these specifications.

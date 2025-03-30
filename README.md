@@ -27,6 +27,7 @@ We developed engine-agnostic pydantic schemas for input/output components for co
 ## External links
 
 - [Common workflow schemas repo](https://github.com/edan-bainglass/common-workflow-schemas)
+- [OO-LD specifications](https://github.com/OO-LD/schema)
 - [AiiDA Common Workflows paper](https://www.nature.com/articles/s41524-021-00594-6)
 - [AiiDA Common Workflows documentation](https://aiida-common-workflows.readthedocs.io/en/latest/)
 
